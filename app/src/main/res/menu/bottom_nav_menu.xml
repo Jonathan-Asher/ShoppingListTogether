@@ -1,9 +1,13 @@
 <!-- res/menu/bottom_nav_menu.xml -->
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:id="@+id/mainFragment"
+        android:id="@+id/homeFragment"
         android:icon="@android:drawable/ic_menu_compass"
         android:title="Home" />
+    <item
+        android:id="@+id/mainFragment"
+        android:icon="@android:drawable/ic_menu_compass"
+        android:title="Welcome" />
     <item
         android:id="@+id/loginFragment"
         android:icon="@android:drawable/ic_menu_view"

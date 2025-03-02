@@ -20,11 +20,15 @@ import androidx.navigation.fragment.findNavController
 import com.example.shoppinglisttogether.databinding.FragmentLoginBinding
 
 import com.example.shoppinglisttogether.R
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 
 class LoginFragment : Fragment() {
 
     private lateinit var loginViewModel: LoginViewModel
     private var _binding: FragmentLoginBinding? = null
+    private lateinit var auth: FirebaseAuth
 
     // This property is only valid between onCreateView and
     // onDestroyView.
@@ -35,14 +39,23 @@ class LoginFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-
         _binding = FragmentLoginBinding.inflate(inflater, container, false)
         return binding.root
-
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        
+        // Initialize Firebase Auth
+        auth = FirebaseAuth.getInstance()
+        
+        // Check if user is already signed in
+        if (auth.currentUser != null) {
+            // User is already signed in, navigate to home
+            findNavController().navigate(R.id.action_loginFragment_to_homeFragment)
+            return
+        }
+        
         loginViewModel = ViewModelProvider(this, LoginViewModelFactory())
             .get(LoginViewModel::class.java)
 
@@ -66,18 +79,6 @@ class LoginFragment : Fragment() {
                 }
             })
 
-        loginViewModel.loginResult.observe(viewLifecycleOwner,
-            Observer { loginResult ->
-                loginResult ?: return@Observer
-                loadingProgressBar.visibility = View.GONE
-                loginResult.error?.let {
-                    showLoginFailed(it)
-                }
-                loginResult.success?.let {
-                    updateUiWithUser(it)
-                }
-            })
-
         val afterTextChangedListener = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) {
                 // ignore
@@ -98,7 +99,7 @@ class LoginFragment : Fragment() {
         passwordEditText.addTextChangedListener(afterTextChangedListener)
         passwordEditText.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                loginViewModel.login(
+                performLogin(
                     usernameEditText.text.toString(),
                     passwordEditText.text.toString()
                 )
@@ -108,7 +109,7 @@ class LoginFragment : Fragment() {
 
         loginButton.setOnClickListener {
             loadingProgressBar.visibility = View.VISIBLE
-            loginViewModel.login(
+            performLogin(
                 usernameEditText.text.toString(),
                 passwordEditText.text.toString()
             )
@@ -118,10 +119,33 @@ class LoginFragment : Fragment() {
             findNavController().navigate(R.id.action_loginFragment_to_registerFragment)
         }
     }
+    
+    private fun performLogin(email: String, password: String) {
+        binding.loading.visibility = View.VISIBLE
+        
+        auth.signInWithEmailAndPassword(email, password)
+            .addOnCompleteListener(requireActivity()) { task ->
+                binding.loading.visibility = View.GONE
+                
+                if (task.isSuccessful) {
+                    // Sign in success, update UI with the signed-in user's information
+                    val user = auth.currentUser
+                    Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
+                    findNavController().navigate(R.id.action_loginFragment_to_homeFragment)
+                } else {
+                    // If sign in fails, display a message to the user.
+                    val errorMessage = when (task.exception) {
+                        is FirebaseAuthInvalidUserException -> "User not found. Please check your email or register."
+                        is FirebaseAuthInvalidCredentialsException -> "Invalid password. Please try again."
+                        else -> "Authentication failed: ${task.exception?.message}"
+                    }
+                    Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+                }
+            }
+    }
 
     private fun updateUiWithUser(model: LoggedInUserView) {
         val welcome = getString(R.string.welcome) + model.displayName
-        // TODO : initiate successful logged in experience
         val appContext = context?.applicationContext ?: return
         Toast.makeText(appContext, welcome, Toast.LENGTH_LONG).show()
     }

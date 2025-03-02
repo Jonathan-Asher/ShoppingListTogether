@@ -21,11 +21,15 @@ import com.example.shoppinglisttogether.databinding.FragmentRegisterBinding
 
 import com.example.shoppinglisttogether.R
 import com.example.shoppinglisttogether.ui.login.LoggedInUserView
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 
 class RegisterFragment : Fragment() {
 
     private lateinit var registerViewModel: RegisterViewModel
     private var _binding: FragmentRegisterBinding? = null
+    private lateinit var auth: FirebaseAuth
 
     // This property is only valid between onCreateView and
     // onDestroyView.
@@ -36,14 +40,23 @@ class RegisterFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-
         _binding = FragmentRegisterBinding.inflate(inflater, container, false)
         return binding.root
-
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        
+        // Initialize Firebase Auth
+        auth = FirebaseAuth.getInstance()
+        
+        // Check if user is already signed in
+        if (auth.currentUser != null) {
+            // User is already signed in, navigate to home
+            findNavController().navigate(R.id.action_registerFragment_to_homeFragment)
+            return
+        }
+        
         registerViewModel = ViewModelProvider(this, RegisterViewModelFactory())
             .get(RegisterViewModel::class.java)
 
@@ -71,20 +84,6 @@ class RegisterFragment : Fragment() {
                 }
             })
 
-        registerViewModel.registerResult.observe(viewLifecycleOwner,
-            Observer { registerResult ->
-                registerResult ?: return@Observer
-                loadingProgressBar.visibility = View.GONE
-                registerResult.error?.let {
-                    showRegisterFailed(it)
-                }
-                registerResult.success?.let {
-                    updateUiWithUser(it)
-                    // Navigate back to login after successful registration
-                    findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
-                }
-            })
-
         val afterTextChangedListener = object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence, start: Int, count: Int, after: Int) {
                 // ignore
@@ -108,9 +107,10 @@ class RegisterFragment : Fragment() {
         
         confirmPasswordEditText.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                registerViewModel.register(
+                performRegistration(
                     usernameEditText.text.toString(),
-                    passwordEditText.text.toString()
+                    passwordEditText.text.toString(),
+                    confirmPasswordEditText.text.toString()
                 )
             }
             false
@@ -118,9 +118,10 @@ class RegisterFragment : Fragment() {
 
         registerButton.setOnClickListener {
             loadingProgressBar.visibility = View.VISIBLE
-            registerViewModel.register(
+            performRegistration(
                 usernameEditText.text.toString(),
-                passwordEditText.text.toString()
+                passwordEditText.text.toString(),
+                confirmPasswordEditText.text.toString()
             )
         }
         
@@ -128,10 +129,39 @@ class RegisterFragment : Fragment() {
             findNavController().navigate(R.id.action_registerFragment_to_loginFragment)
         }
     }
+    
+    private fun performRegistration(email: String, password: String, confirmPassword: String) {
+        if (password != confirmPassword) {
+            binding.confirmPassword.error = getString(R.string.passwords_dont_match)
+            binding.loading.visibility = View.GONE
+            return
+        }
+        
+        binding.loading.visibility = View.VISIBLE
+        
+        auth.createUserWithEmailAndPassword(email, password)
+            .addOnCompleteListener(requireActivity()) { task ->
+                binding.loading.visibility = View.GONE
+                
+                if (task.isSuccessful) {
+                    // Sign up success, update UI with the signed-in user's information
+                    val user = auth.currentUser
+                    Toast.makeText(context, "Registration successful!", Toast.LENGTH_SHORT).show()
+                    findNavController().navigate(R.id.action_registerFragment_to_homeFragment)
+                } else {
+                    // If sign up fails, display a message to the user.
+                    val errorMessage = when (task.exception) {
+                        is FirebaseAuthUserCollisionException -> "Email already in use. Please use a different email or login."
+                        is FirebaseAuthWeakPasswordException -> "Password is too weak. Please use a stronger password."
+                        else -> "Registration failed: ${task.exception?.message}"
+                    }
+                    Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
+                }
+            }
+    }
 
     private fun updateUiWithUser(model: LoggedInUserView) {
         val welcome = getString(R.string.welcome) + model.displayName
-        // TODO : initiate successful logged in experience
         val appContext = context?.applicationContext ?: return
         Toast.makeText(appContext, welcome, Toast.LENGTH_LONG).show()
     }
