@@ -1,0 +1,9 @@
+<!-- res/menu/bottom_nav_menu.xml -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/mainFragment"
+        android:title="Login" />
+    <item
+        android:id="@+id/loginFragment"
+        android:title="Register" />
+</menu>
